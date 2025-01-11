@@ -29,7 +29,7 @@ class LD06:
                     self.state = RcvState.LEN
                     self.nb_expected = 1
             elif self.state == RcvState.LEN:
-                self.len = data[0] & 0x0E
+                self.len = data[0] & 0x1F
                 self.state = RcvState.DATA
                 self.nb_expected = 9 + 3 * self.len
             elif self.state == RcvState.DATA:

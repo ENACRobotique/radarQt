@@ -6,25 +6,8 @@ import sys
 import a1m8
 import xv11
 import ld06
+import ecalrcv
 import sys
-
-
-class LidarHandler(QtCore.QThread):
-    sample_available = QtCore.pyqtSignal((float, float, float, int))
-    speed = QtCore.pyqtSignal(float)
-
-    def __init__(self, parent=None):
-        QtCore.QThread.__init__(self, parent)
-        #self.lidar = a1m8.A1M8("/dev/ttyUSB0")
-        #self.lidar = xv11.XV11("/dev/ttyUSB0")
-        self.lidar = ld06.LD06(sys.argv[1])
-
-    def run(self):
-        #msgs = self.lidar.send_reset()
-        #print(msgs)
-        for angle, quality, distance, s in self.lidar.start_scan():
-            self.sample_available.emit(math.radians(angle), distance, quality, s)
-            self.speed.emit(self.lidar.speed)
 
 
 class RadarView(QtWidgets.QWidget):
@@ -61,16 +44,9 @@ class RadarView(QtWidgets.QWidget):
         self.mm_to_pixel *= (1 + d / 1000)
         self.update()
 
-    def add_data(self, angle, distance, quality, s):
-        if s != 0:
-            t = time.time()
-            dt = t - self.last_tour_time
-            self.last_tour_time = t
-            #self.frequency = 0.6*self.frequency + 0.4*1/dt
-            self.data = self.back
-            self.back = []
-            self.update()
-        self.back.append((angle, distance, quality))
+    def lidar_cb(self, data):
+           self.data = data
+           self.update()
 
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.data = []
@@ -129,7 +105,7 @@ class RadarView(QtWidgets.QWidget):
         painter.setPen(QtCore.Qt.NoPen)
         for angle, distance, quality in self.data:
             if quality != 0 and distance != 0:
-                pos = QtCore.QPointF(self.mm_to_pixel * distance * math.cos(angle), self.mm_to_pixel * distance * math.sin(angle))
+                pos = QtCore.QPointF(self.mm_to_pixel * distance * math.cos(-angle), self.mm_to_pixel * distance * math.sin(-angle))
                 size = 5
                 c = self.color_from_quality(quality)
                 painter.setBrush(c)
@@ -149,19 +125,10 @@ class ApplicationWindow(QtWidgets.QMainWindow):
 
         self.radarView = RadarView(self._main)
         layout.addWidget(self.radarView)
+        self.lidar = ecalrcv.Ecal(self)
+        self.lidar.lidar_data_sig.connect(self.radarView.lidar_cb)
 
-        self.lidar = LidarHandler()
-        self.lidar.sample_available.connect(self.handle_data)
-        self.lidar.speed.connect(self.handle_speed)
-        self.lidar.start()
-
-    def handle_data(self, theta, distance, quality, s):
-        self.radarView.add_data(theta, distance, quality, s)
-
-    def handle_speed(self, speed):
-        self.radarView.set_speed(speed)
-
-
+    
 if __name__ == "__main__":
     qapp = QtWidgets.QApplication(sys.argv)
     app = ApplicationWindow()
