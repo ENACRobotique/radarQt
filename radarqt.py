@@ -20,6 +20,7 @@ class RadarView(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         QtWidgets.QWidget.__init__(self, *args, **kwargs)
         self.data = []
+        self.amalgame_data = []
         self.back = []
         self.last_tour_time = time.time()
         self.frequency = 0
@@ -47,6 +48,10 @@ class RadarView(QtWidgets.QWidget):
     def lidar_cb(self, data):
            self.data = data
            self.update()
+    
+    def lidar_amalgame_cb(self, amalgame_data):
+        self.amalgame_data = amalgame_data
+        self.update()
 
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.data = []
@@ -110,6 +115,15 @@ class RadarView(QtWidgets.QWidget):
                 c = self.color_from_quality(quality)
                 painter.setBrush(c)
                 painter.drawEllipse(pos, size, size)
+        
+        pen = QtGui.QPen(QtGui.QColor(255, 0, 255), 2)
+        painter.setPen(pen)
+        painter.setBrush(QtCore.Qt.NoBrush)
+        for x, y, size in self.amalgame_data:
+            if size < 200:
+                pos = QtCore.QPointF(self.mm_to_pixel * x, -self.mm_to_pixel * y)
+                size *= self.mm_to_pixel
+                painter.drawEllipse(pos, size, size)
 
 
     def sizeHint(self) -> QtCore.QSize:
@@ -127,6 +141,7 @@ class ApplicationWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.radarView)
         self.lidar = ecalrcv.Ecal(self)
         self.lidar.lidar_data_sig.connect(self.radarView.lidar_cb)
+        self.lidar.amalgame_sig.connect(self.radarView.lidar_amalgame_cb)
 
     
 if __name__ == "__main__":
