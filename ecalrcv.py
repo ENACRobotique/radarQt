@@ -5,8 +5,7 @@ from enum import Enum
 import struct
 import time
 import sys
-sys.path.append('/home/robot/projects/2025/rpi/generated')
-import lidar_data_pb2  as pbl
+from generated import lidar_data_pb2  as pbl
 import ecal.core.core as ecal_core
 from ecal.core.publisher import ProtoPublisher
 from ecal.core.subscriber import ProtoSubscriber
