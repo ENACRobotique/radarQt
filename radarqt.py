@@ -139,7 +139,7 @@ class RadarView(QtWidgets.QWidget):
             if size < 200:
                 pos = QtCore.QPointF(self.mm_to_pixel * x, -self.mm_to_pixel * y)
                 size *= self.mm_to_pixel
-                painter.drawEllipse(pos, size, size)
+                painter.drawEllipse(pos, size/2, size/2)
 
         painter.setPen(QtCore.Qt.NoPen)
         
@@ -168,7 +168,7 @@ class RadarView(QtWidgets.QWidget):
             )
             painter.setFont(font)
             painter.drawText(
-                QtCore.QPointF(pos.x() + 10, pos.y() - 10),
+                QtCore.QPointF(pos.x() - 10, pos.y() - 10),
                 str(index))
 
         # Position estimée des balises par les moindres carrés
