@@ -1,3 +1,7 @@
+# Deprecated
+This software have been moved to https://github.com/ENACRobotique/rpi/tree/main/tools/lidar
+
+
 RadarQt
 =======
 
