@@ -1,13 +1,14 @@
 #!/usr/bin/python3
 from PyQt5 import QtCore, QtWidgets, QtGui
+from PyQt5.QtCore import QObject, pyqtSignal
 import time
 import math
 import sys
-import a1m8
-import xv11
-import ld06
-import ecalrcv
-import sys
+import argparse
+import ecal.core.core as ecal_core
+from ecal.core.publisher import ProtoPublisher
+from ecal.core.subscriber import ProtoSubscriber
+from generated import lidar_data_pb2  as pbl
 
 TOLERANCE = 500
 
@@ -17,9 +18,32 @@ class RadarView(QtWidgets.QWidget):
                    "#ffff9d", "#fee17e", "#fcc267",
                    "#f7a258", "#ef8250", "#e4604e",
                    "#d43d51"]
+    lidar_data_sig = pyqtSignal(list)
+    amalgame_sig = pyqtSignal(list)
+    balises_odom_sig=pyqtSignal(list)
+    balises_nearodom_sig=pyqtSignal(list)
+    transforms_sig=pyqtSignal(list)
 
-    def __init__(self, *args, **kwargs):
-        QtWidgets.QWidget.__init__(self, *args, **kwargs)
+    def __init__(self, args, parent=None):
+        QtWidgets.QWidget.__init__(self, parent)
+        self.args = args
+        if not ecal_core.is_initialized():
+            ecal_core.initialize(sys.argv, "RadarQt receiver")
+        self.lidar_sub = ProtoSubscriber(args.lidar, pbl.Lidar)
+        self.lidar_sub.set_callback(self.handle_lidar_data)
+        if args.no_loca:
+            self.lidar_amalgames_sub = ProtoSubscriber("amalgames", pbl.Amalgames)
+            self.lidar_amalgames_sub.set_callback(self.handle_amalgames_data)
+            self.lidar_balises_odom_sub = ProtoSubscriber("balises_odom", pbl.Balises)    
+            self.lidar_balises_odom_sub.set_callback(self.handle_balises_odom_data)   
+            self.lidar_balises_nearodom_sub = ProtoSubscriber("balises_near_odom", pbl.Balises)    
+            self.lidar_balises_nearodom_sub.set_callback(self.handle_balises_nearodom_data)  
+
+        self.lidar_data_sig.connect(self.lidar_cb)
+        self.amalgame_sig.connect(self.lidar_amalgame_cb)
+        self.balises_odom_sig.connect(self.lidar_balise_odom_cd)
+        self.balises_nearodom_sig.connect(self.lidar_balise_nearodom_cd)
+
         self.data = []
         self.amalgame_data = []
         self.balise_odom_data=[]
@@ -27,16 +51,13 @@ class RadarView(QtWidgets.QWidget):
         self.transforms_data=[]
         self.back = []
         self.last_tour_time = time.time()
-        self.frequency = 0
+        self.period = 1
         self.last_angle = 0
         self.mm_to_pixel = 0.1
         self.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
             QtWidgets.QSizePolicy.MinimumExpanding
         )
-
-    def set_speed(self, speed):
-        self.frequency = speed/60
 
     def color_from_quality(self, quality):
         #color_index = quality - 15 + len(self.COLOR_SCALE) / 2
@@ -65,9 +86,27 @@ class RadarView(QtWidgets.QWidget):
         self.nearodom_data=nearodom_data
         self.update()
     
-    # def transforms_cd(self,transforms_data):
-    #     self.transforms_data=transforms_data
-    #     self.update()
+    def handle_lidar_data(self, topic_name, msg, _time):
+        now = time.time()
+        dt = now - self.last_tour_time
+        self.last_tour_time = now
+        self.period = self.period*0.4 + dt * 0.6   # passe bas
+
+        data = list(zip(msg.angles, msg.distances, msg.quality))
+        self.lidar_data_sig.emit(data)
+    
+    def handle_amalgames_data(self,topic, msg, time):
+        data = list(zip(msg.x,msg.y,msg.size))    
+        self.amalgame_sig.emit(data)
+
+    def handle_balises_odom_data(self,topic, msg, time):
+        data = list(zip(msg.index,msg.x,msg.y))    
+        self.balises_odom_sig.emit(data)
+
+    def handle_balises_nearodom_data(self,topic, msg, time):
+        data = list(zip(msg.index,msg.x,msg.y))    
+        self.balises_nearodom_sig.emit(data)
+
 
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.data = []
@@ -84,7 +123,7 @@ class RadarView(QtWidgets.QWidget):
 
         # paint frequency
         painter.setPen(QtCore.Qt.white)
-        txt = "{:.2f} Hz".format(self.frequency)
+        txt = "{:0>5.2f} Hz".format(1/self.period)
         painter.drawText(10, 20, txt)
 
         # paint scale
@@ -205,25 +244,23 @@ class RadarView(QtWidgets.QWidget):
 
 
 class ApplicationWindow(QtWidgets.QMainWindow):
-    def __init__(self):
+    def __init__(self, args):
         super().__init__()
         self._main = QtWidgets.QWidget()
         self.setCentralWidget(self._main)
         layout = QtWidgets.QVBoxLayout(self._main)
-
-        self.radarView = RadarView(self._main)
+        self.radarView = RadarView(args, self._main)
         layout.addWidget(self.radarView)
-        self.lidar = ecalrcv.Ecal(self)
-        self.lidar.lidar_data_sig.connect(self.radarView.lidar_cb)
-        self.lidar.amalgame_sig.connect(self.radarView.lidar_amalgame_cb)
-        self.lidar.balises_odom_sig.connect(self.radarView.lidar_balise_odom_cd)
-        self.lidar.balises_nearodom_sig.connect(self.radarView.lidar_balise_nearodom_cd)
-        # self.lidar.transforms_sig.connect(self.radarView.transforms_cd)
-
     
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--lidar", default="lidar_data", help="LidarData topic name")
+    parser.add_argument("-l", "--no-loca", action="store_false", default=True, help="Do not draw localisation helpers")
+    args = parser.parse_args()
+
     qapp = QtWidgets.QApplication(sys.argv)
-    app = ApplicationWindow()
+    app = ApplicationWindow(args)
     app.show()
     app.activateWindow()
     app.raise_()
